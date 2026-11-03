@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LKP Search Grid</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mgrs@2.0.0/dist/mgrs.js"></script>
+<style>
+:root{
+  --paper:#eef2f1; --sheet:#fbfcfb; --ink:#14232b; --muted:#5b6b70; --rule:#cfd9d8;
+  --accent:#e2561f; --accent-ink:#ffffff; --ring:#ffffff; --field:#ffffff; --err:#c0392b;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --paper:#0f1719; --sheet:#152024; --ink:#e3ecec; --muted:#93a4a8; --rule:#2a3a3f;
+  --accent:#f26a33; --accent-ink:#1a0c05; --field:#0f1a1d; --err:#ff7a6b; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));
+  padding-top:max(14px,env(safe-area-inset-top,0px));padding-bottom:max(30px,env(safe-area-inset-bottom,0px))}
+.wrap{max-width:1280px;margin:0 auto;display:grid;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,6vw,40px);line-height:1;margin:0;text-transform:uppercase}
+h1 span{color:var(--accent)}
+h2{font-family:var(--display);font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.04em;margin:0}
+.sub{color:var(--muted);font-size:13px;margin:4px 0 0}
+.cols{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:960px){.cols{grid-template-columns:330px minmax(0,1fr)}}
+.panel{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:14px;display:grid;gap:12px;min-width:0;align-content:start}
+label,.lab{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin-bottom:4px}
+input,select{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--rule);border-radius:4px;padding:8px 10px;width:100%;min-width:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.row4 input{padding:8px 4px;text-align:center}
+.hint{font-size:12px;color:var(--muted);margin:4px 0 0}
+.err{color:var(--err)}
+button{font:inherit;font-weight:600;cursor:pointer;border-radius:4px;border:1px solid var(--rule);background:var(--field);color:var(--ink);padding:8px 12px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button[aria-pressed="true"].mode{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg-toggle{display:inline-flex;border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+.seg-toggle button{border:0;border-radius:0;padding:4px 10px;font-size:12px}
+.seg-toggle button[aria-pressed="true"]{background:var(--ink);color:var(--sheet)}
+.check{display:flex;align-items:center;gap:8px;font-size:14px}
+.check input{width:auto}
+.lkpbtns{display:flex;gap:8px;flex-wrap:wrap}
+.lkpbtns button{flex:1;min-width:120px;font-size:13px}
+#map{height:min(72vh,680px);min-height:380px;border:1px solid var(--rule);border-radius:6px;background:#9aa}
+#map.placing{cursor:crosshair}
+.banner{position:absolute;z-index:1000;left:50%;top:10px;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:13px;padding:6px 12px;border-radius:999px;pointer-events:none;white-space:nowrap}
+.mapwrap{position:relative}
+.brushbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 12px 6px 8px;font-size:13px;border:1px solid var(--rule);background:var(--field)}
+.chip .dot{width:14px;height:14px;border-radius:50%;flex:none}
+.chip[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.teams{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.team{border:1px solid var(--rule);border-left:6px solid var(--c);border-radius:4px;padding:10px 12px;display:grid;gap:6px;min-width:0;background:var(--field)}
+.team input{border:0;border-bottom:1px dashed var(--rule);border-radius:0;padding:2px 0;font-weight:600;background:transparent}
+.team .stats{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.team .segs{font-family:var(--mono);font-size:12px;word-break:break-word}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.toast{font-size:13px;color:var(--muted)}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:4px 8px;text-align:left;border-bottom:1px solid var(--rule);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.foot{font-size:12px;color:var(--muted);max-width:80ch}
+/* map labels */
+.seglbl{background:none;border:0;box-shadow:none;padding:0;font-family:var(--mono);font-weight:600;color:#fff;
+  text-shadow:0 0 3px #000,0 0 3px #000,0 0 2px #000;font-size:12px;white-space:nowrap}
+.seglbl.sq{font-weight:500;font-size:10.5px}
+.seglbl span{position:absolute;left:0;top:0;transform:translate(-50%,-50%)}
+.lkpicon{width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 0 0 2px #000a}
+.leaflet-container{font-family:var(--body)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>LKP <span>Search Grid</span></h1>
+      <p class="sub">Drop the last known point on the map, build ring sectors and outer squares, assign teams, export to ATAK.</p>
+    </div>
+    <div style="min-width:220px;flex:1;max-width:340px">
+      <label for="incident">Incident name</label>
+      <input id="incident" placeholder="e.g. 24-1103 Umstead missing hiker">
+    </div>
+  </header>
+
+  <div class="cols">
+    <section class="panel" aria-label="Grid setup">
+      <h2>Setup</h2>
+      <div>
+        <label for="lkp">Last known point (lat, long or MGRS)</label>
+        <input id="lkp" class="mono" placeholder="35.8676, -78.7516">
+        <p class="hint mono" id="lkpOut">Tap “Set LKP on map” or type coordinates.</p>
+        <div class="lkpbtns" style="margin-top:8px">
+          <button id="placeBtn" class="mode" aria-pressed="false">Set LKP on map</button>
+          <button id="gpsBtn">Use my location</button>
+        </div>
+      </div>
+      <div>
+        <label for="profile">Subject category</label>
+        <select id="profile"></select>
+        <p class="hint">Fills the 25 / 50 / 75 / 95% rings. Edit any value to match your field guide.</p>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span class="lab" style="margin:0">Ring radii</span>
+          <span class="seg-toggle" role="group" aria-label="Units">
+            <button id="uKm" aria-pressed="true">km</button><button id="uMi" aria-pressed="false">mi</button>
+          </span>
+        </div>
+        <div class="row4">
+          <div><label for="r1">25%</label><input id="r1" class="mono" inputmode="decimal"></div>
+          <div><label for="r2">50%</label><input id="r2" class="mono" inputmode="decimal"></div>
+          <div><label for="r3">75%</label><input id="r3" class="mono" inputmode="decimal"></div>
+          <div><label for="r4">95%</label><input id="r4" class="mono" inputmode="decimal"></div>
+        </div>
+        <p class="hint err" id="rErr" hidden></p>
+      </div>
+      <div class="row2">
+        <div><label for="nsec">Sectors</label>
+          <select id="nsec"><option>4</option><option>8</option><option>12</option><option>16</option></select></div>
+        <div><label for="rot">Rotate sectors (°)</label><input id="rot" class="mono" inputmode="decimal"></div>
+      </div>
+      <label class="check" style="text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400"><input type="checkbox" id="splitA"> Split the 25% circle into sectors</label>
+      <div class="row2">
+        <div><label for="cell">Square size (m)</label><input id="cell" class="mono" inputmode="numeric"></div>
+        <div><label for="buf">Squares past 95% (m)</label><input id="buf" class="mono" inputmode="numeric"></div>
+      </div>
+      <p class="hint" id="summary"></p>
+      <button id="resetBtn" style="font-size:13px">Clear all assignments</button>
+    </section>
+
+    <div style="display:grid;gap:10px;min-width:0;align-content:start">
+      <div class="brushbar" id="brushes" aria-label="Assign to team"></div>
+      <div class="mapwrap">
+        <div id="map"></div>
+        <div class="banner" id="banner" hidden>Tap the map to place the LKP</div>
+      </div>
+      <p class="hint" style="margin:0">Pick a team, then tap segments to assign. Tap again to clear. Drag the orange LKP marker to move the whole grid.</p>
+    </div>
+  </div>
+
+  <section class="panel" aria-label="Team assignments">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2>Assignments</h2>
+      <button id="addTeam">+ Add team</button>
+    </div>
+    <div class="teams" id="teams"></div>
+    <details>
+      <summary class="lab" style="cursor:pointer">Ring segment table</summary>
+      <div class="tbl"><table id="ringTbl"></table></div>
+    </details>
+  </section>
+
+  <section class="panel" aria-label="Export">
+    <h2>Export to ATAK</h2>
+    <div class="actions">
+      <button class="primary" id="exportPkg">Download ATAK data package (.zip)</button>
+      <button id="exportKml">Download KML</button>
+      <span class="toast" id="toast" role="status"></span>
+    </div>
+    <p class="hint">In ATAK: Import Manager → Local SD → pick the .zip (or .kml). Segments arrive as labeled, team-colored polygons grouped by team, with the LKP marked. Send the .zip as a data package to push it to every device.</p>
+  </section>
+
+  <p class="foot">Ring distances are approximate starting values for a temperate, flat-terrain region (straight-line distance from the IPP). Confirm against your Lost Person Behavior reference and adjust for terrain, weather and subject history. POA shares follow the ring model: 25% in each of the first three bands, 20% in the 75–95% band, 5% spread across the outer squares by area. Imagery © Esri and contributors; streets © OpenStreetMap contributors; topo © USGS.</p>
+</div>
+
+<script>
+(function(){
+const PROFILES = {
+  "Dementia":[0.3,0.8,1.9,7.9],
+  "Child 1–3":[0.2,0.3,0.6,1.6],
+  "Child 4–6":[0.1,0.5,0.9,2.3],
+  "Child 7–9":[0.3,0.8,2.0,4.8],
+  "Child 10–12":[0.4,1.0,2.0,5.6],
+  "Autism":[0.4,1.0,2.1,6.4],
+  "Despondent":[0.3,1.1,3.0,8.2],
+  "Hiker":[1.1,2.0,4.0,11.9],
+  "Hunter":[1.0,2.1,3.6,7.5],
+  "Custom":null
+};
+const PALETTE=["#2f6fde","#e04aa6","#2fbf6a","#8f63e6","#f0b21a","#1fb5c6","#e23d3d","#a86b33"];
+const KEY="sar-grid-v2";
+const MI=1.609344;
+const $=id=>document.getElementById(id);
+
+let st={incident:"",lkp:"",profile:"Dementia",r:PROFILES["Dementia"].slice(),unit:"km",nsec:8,rot:0,splitA:false,cell:500,buf:1000,
+  teams:[{id:"t1",name:"Drone 1",c:PALETTE[0]},{id:"t2",name:"Drone 2",c:PALETTE[1]},{id:"t3",name:"Ground A",c:PALETTE[2]},{id:"t4",name:"Ground B",c:PALETTE[3]},{id:"t5",name:"K9 1",c:PALETTE[4]}],
+  assign:{},brush:"t1",base:"Imagery",view:null};
+try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s&&s.r)st=Object.assign(st,s);}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}}
+
+let origin=null, segs=[], placing=false;
+
+/* ---------- map ---------- */
+const map=L.map("map",{zoomControl:true,preferCanvas:false}).setView(st.view?st.view.c:[35.78,-78.78],st.view?st.view.z:11);
+const esriRef=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",{maxZoom:19});
+const esriRoads=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",{maxZoom:19});
+const bases={
+  "Imagery":L.layerGroup([L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Imagery © Esri"}),esriRoads,esriRef]),
+  "Topo (USGS)":L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",{maxZoom:16,attribution:"USGS"}),
+  "Streets":L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"})
+};
+(bases[st.base]||bases.Imagery).addTo(map);
+L.control.layers(bases,null,{position:"topright"}).addTo(map);
+L.control.scale({imperial:true,metric:true}).addTo(map);
+map.on("baselayerchange",e=>{st.base=e.name;save();});
+map.on("moveend",()=>{const c=map.getCenter();st.view={c:[c.lat,c.lng],z:map.getZoom()};save();updateLabels();});
+const gridLayer=L.layerGroup().addTo(map), labelLayer=L.layerGroup().addTo(map);
+let lkpMarker=null;
+
+map.on("click",e=>{if(placing){setOrigin(e.latlng.lat,e.latlng.lng,true);setPlacing(false);}});
+function setPlacing(v){placing=v;$("placeBtn").setAttribute("aria-pressed",v);$("banner").hidden=!v;$("map").classList.toggle("placing",v);}
+$("placeBtn").onclick=()=>setPlacing(!placing);
+$("gpsBtn").onclick=()=>{
+  if(!navigator.geolocation){toast("Location isn’t available on this device.");return;}
+  $("lkpOut").textContent="Getting your location…";
+  navigator.geolocation.getCurrentPosition(p=>setOrigin(p.coords.latitude,p.coords.longitude,true),
+    ()=>{$("lkpOut").innerHTML='<span class="err">Couldn’t get your location. Check location permission for this site.</span>';},{enableHighAccuracy:true,timeout:15000});
+};
+
+/* ---------- inputs ---------- */
+const prof=$("profile");
+Object.keys(PROFILES).forEach(k=>{const o=document.createElement("option");o.textContent=k;prof.appendChild(o);});
+function fmt(v){return (Math.round(v*100)/100).toString();}
+function fillInputs(){
+  $("incident").value=st.incident; $("lkp").value=st.lkp; prof.value=st.profile;
+  const f=st.unit==="mi"?1/MI:1;
+  [1,2,3,4].forEach(i=>$("r"+i).value=fmt(st.r[i-1]*f));
+  $("uKm").setAttribute("aria-pressed",st.unit==="km");$("uMi").setAttribute("aria-pressed",st.unit==="mi");
+  $("nsec").value=String(st.nsec);$("rot").value=st.rot;$("splitA").checked=st.splitA;$("cell").value=st.cell;$("buf").value=st.buf;
+}
+function readRadii(){
+  const f=st.unit==="mi"?MI:1;
+  const r=[1,2,3,4].map(i=>parseFloat($("r"+i).value)*f);
+  const ok=r.every(v=>v>0)&&r[0]<r[1]&&r[1]<r[2]&&r[2]<r[3];
+  $("rErr").hidden=ok;$("rErr").textContent=ok?"":"Each ring must be larger than the one before it.";
+  if(ok)st.r=r;return ok;
+}
+prof.onchange=()=>{st.profile=prof.value;if(PROFILES[prof.value])st.r=PROFILES[prof.value].slice();fillInputs();rebuild(true);};
+[1,2,3,4].forEach(i=>$("r"+i).addEventListener("input",()=>{if(readRadii()){st.profile="Custom";prof.value="Custom";rebuild(false);}}));
+$("uKm").onclick=()=>{st.unit="km";fillInputs();save();};
+$("uMi").onclick=()=>{st.unit="mi";fillInputs();save();};
+$("nsec").onchange=()=>{st.nsec=+$("nsec").value;rebuild(false);};
+$("rot").oninput=()=>{const v=parseFloat($("rot").value);if(!isNaN(v)){st.rot=((v%360)+360)%360;rebuild(false);}};
+$("splitA").onchange=()=>{st.splitA=$("splitA").checked;rebuild(false);};
+$("cell").oninput=()=>{const v=parseFloat($("cell").value);if(v>=50){st.cell=v;rebuild(false);}};
+$("buf").oninput=()=>{const v=parseFloat($("buf").value);if(v>=0){st.buf=v;rebuild(false);}};
+$("lkp").onchange=()=>{const p=parseLKP($("lkp").value);if(p)setOrigin(p[0],p[1],true);};
+$("incident").oninput=()=>{st.incident=$("incident").value;save();};
+$("resetBtn").onclick=()=>{if(!Object.keys(st.assign).length)return;const b=$("resetBtn");
+  if(b.dataset.confirm){st.assign={};segs.forEach(paint);renderTeams();save();b.textContent="Clear all assignments";delete b.dataset.confirm;}
+  else{b.dataset.confirm="1";b.textContent="Tap again to clear";setTimeout(()=>{b.textContent="Clear all assignments";delete b.dataset.confirm;},3000);}};
+
+function parseLKP(t){
+  t=(t||"").trim();let lat,lon;
+  const m=t.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if(m){lat=+m[1];lon=+m[2];}
+  else if(window.mgrs){try{const p=mgrs.toPoint(t.replace(/\s+/g,"").toUpperCase());lon=p[0];lat=p[1];}catch(e){}}
+  if(lat==null||isNaN(lat)||Math.abs(lat)>90||Math.abs(lon)>180){$("lkpOut").innerHTML='<span class="err">Enter “lat, long” (35.8676, -78.7516) or an MGRS grid.</span>';return null;}
+  return [lat,lon];
+}
+function mgrsOf(lat,lon){if(!window.mgrs)return"";try{return mgrs.forward([lon,lat],5).replace(/^(\d+[A-Z])([A-Z]{2})(\d{5})(\d{5})$/,"$1 $2 $3 $4");}catch(e){return"";}}
+function setOrigin(lat,lon,fly){
+  const moved=origin&&(Math.abs(origin.lat-lat)>1e-7||Math.abs(origin.lon-lon)>1e-7);
+  origin={lat,lon};st.lkp=lat.toFixed(6)+", "+lon.toFixed(6);$("lkp").value=st.lkp;
+  const g=mgrsOf(lat,lon);$("lkpOut").textContent=lat.toFixed(5)+", "+lon.toFixed(5)+(g?"  ·  "+g:"");
+  if(moved&&Object.keys(st.assign).length) toast("Grid moved with the LKP. Assignments kept by segment label.");
+  rebuild(fly);
+}
+
+/* ---------- geometry (local meters, x east, y north) ---------- */
+function toLL(x,y){return [origin.lat+y/111320, origin.lon+x/(111320*Math.cos(origin.lat*Math.PI/180))];}
+function polar(r,b){const a=b*Math.PI/180;return [r*Math.sin(a),r*Math.cos(a)];}
+function arc(r,b0,b1){const n=Math.max(4,Math.ceil(Math.abs(b1-b0)/2));const p=[];for(let i=0;i<=n;i++)p.push(polar(r,b0+(b1-b0)*i/n));return p;}
+function area(p){let s=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];s+=a[0]*b[1]-b[0]*a[1];}return Math.abs(s)/2;}
+function centroid(p){let x=0,y=0;p.forEach(q=>{x+=q[0];y+=q[1];});return [x/p.length,y/p.length];}
+function colName(i){let s="";i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s;}
+function build(){
+  const R=st.r.map(v=>v*1000),n=st.nsec,w=360/n,out=[],bandPOA=[25,25,25,20],bands=["A","B","C","D"];
+  for(let b=0;b<4;b++){
+    const rin=b?R[b-1]:0,rout=R[b];
+    if(b===0&&!st.splitA){out.push({id:"A",kind:"ring",pts:arc(rout,0,360).slice(0,-1),poa:25,lp:[0,0],a:Math.PI*rout*rout,rin:0,rout});continue;}
+    for(let j=0;j<n;j++){
+      const b0=st.rot+j*w,b1=b0+w;let pts=arc(rout,b0,b1);
+      pts=rin>0?pts.concat(arc(rin,b1,b0)):pts.concat([[0,0]]);
+      out.push({id:bands[b]+(j+1),kind:"ring",pts,poa:bandPOA[b]/n,lp:polar(rin>0?(rin+rout)/2:rout*0.6,b0+w/2),a:area(pts),b0,b1,rin,rout});
+    }
+  }
+  const s=st.cell,r4=R[3],E=Math.ceil((r4+st.buf)/s)*s,cols=Math.round(2*E/s),sq=[];
+  for(let row=0;row<cols;row++)for(let c=0;c<cols;c++){
+    const x0=-E+c*s,y1=E-row*s,x1=x0+s,y0=y1-s,corners=[[x0,y1],[x1,y1],[x1,y0],[x0,y0]];
+    if(corners.every(q=>Math.hypot(q[0],q[1])<=r4))continue;
+    let pts;
+    if(Math.hypot(Math.max(x0,Math.min(0,x1)),Math.max(y0,Math.min(0,y1)))<r4){
+      pts=[];const steps=24;
+      for(let k=0;k<4;k++){const a=corners[k],bq=corners[(k+1)%4];
+        for(let t=0;t<steps;t++){let x=a[0]+(bq[0]-a[0])*t/steps,y=a[1]+(bq[1]-a[1])*t/steps;const d=Math.hypot(x,y);if(d<r4){x*=r4/d;y*=r4/d;}pts.push([x,y]);}}
+    }else pts=corners;
+    const A=area(pts);if(A<s*s*0.01)continue;
+    sq.push({id:"G-"+colName(c)+String(row+1).padStart(2,"0"),kind:"sq",pts,a:A,lp:centroid(pts)});
+  }
+  const tot=sq.reduce((t,q)=>t+q.a,0);sq.forEach(q=>q.poa=5*q.a/tot);
+  return {segs:out.concat(sq),E};
+}
+
+/* ---------- draw ---------- */
+function teamById(id){return st.teams.find(t=>t.id===id);}
+function paint(s){
+  const t=teamById(st.assign[s.id]);
+  s.poly.setStyle(t?{color:t.c,weight:2.5,fillColor:t.c,fillOpacity:.42,opacity:1}
+    :{color:s.kind==="sq"?"#ffffff":"#ffffff",weight:s.kind==="sq"?0.8:1.4,opacity:s.kind==="sq"?.55:.9,fillColor:"#000",fillOpacity:.04});
+}
+function draw(){
+  gridLayer.clearLayers();labelLayer.clearLayers();
+  segs.forEach(s=>{
+    s.poly=L.polygon(s.pts.map(q=>toLL(q[0],q[1])),{bubblingMouseEvents:false}).addTo(gridLayer);
+    s.poly.on("click",()=>{if(placing){return;}toggle(s.id);});
+    paint(s);
+    s.lbl=L.marker(toLL(s.lp[0],s.lp[1]),{interactive:false,keyboard:false,
+      icon:L.divIcon({className:"seglbl"+(s.kind==="sq"?" sq":""),html:"<span>"+s.id.replace("G-","")+"</span>",iconSize:[0,0],iconAnchor:[0,0]})});
+  });
+  st.r.forEach((r,i)=>L.circle([origin.lat,origin.lon],{radius:r*1000,color:"#ffffff",weight:i===3?3:2,fill:false,interactive:false,dashArray:i===3?null:"6 4"}).addTo(gridLayer));
+  if(lkpMarker)lkpMarker.remove();
+  lkpMarker=L.marker([origin.lat,origin.lon],{draggable:true,zIndexOffset:1000,
+    icon:L.divIcon({className:"",html:'<div class="lkpicon"></div>',iconSize:[22,22],iconAnchor:[11,11]})}).addTo(map);
+  lkpMarker.bindTooltip("LKP",{permanent:true,direction:"right",offset:[10,0]});
+  lkpMarker.on("dragend",e=>{const p=e.target.getLatLng();setOrigin(p.lat,p.lng,false);});
+  updateLabels();
+}
+function updateLabels(){
+  if(!origin)return;
+  const mpp=40075016.686*Math.cos(origin.lat*Math.PI/180)/Math.pow(2,map.getZoom()+8);
+  const b=map.getBounds().pad(0.2);
+  segs.forEach(s=>{
+    const show=Math.sqrt(s.a)/mpp>(s.kind==="sq"?34:26)&&b.contains(s.lbl.getLatLng());
+    if(show&&!labelLayer.hasLayer(s.lbl))labelLayer.addLayer(s.lbl);
+    else if(!show&&labelLayer.hasLayer(s.lbl))labelLayer.removeLayer(s.lbl);
+  });
+}
+map.on("zoomend",updateLabels);
+
+function toggle(id){
+  if(st.assign[id]===st.brush||st.brush==="none")delete st.assign[id];else st.assign[id]=st.brush;
+  const s=segs.find(q=>q.id===id);if(s)paint(s);renderTeams();save();
+}
+
+/* ---------- teams ---------- */
+function renderBrushes(){
+  const b=$("brushes");b.innerHTML="";
+  st.teams.concat([{id:"none",name:"Clear",c:"transparent"}]).forEach(t=>{
+    const c=document.createElement("button");c.className="chip";c.setAttribute("aria-pressed",st.brush===t.id);
+    c.innerHTML=`<span class="dot" style="background:${t.c};${t.id==="none"?"border:1.5px dashed var(--muted)":""}"></span>`;
+    c.appendChild(document.createTextNode(t.name||"Team"));c.onclick=()=>{st.brush=t.id;renderBrushes();save();};b.appendChild(c);
+  });
+}
+const acres=m2=>m2/4046.86;
+function renderTeams(){
+  const box=$("teams");box.innerHTML="";
+  st.teams.forEach(t=>{
+    const list=segs.filter(s=>st.assign[s.id]===t.id);
+    const d=document.createElement("div");d.className="team";d.style.setProperty("--c",t.c);
+    const inp=document.createElement("input");inp.value=t.name;inp.id="tn-"+t.id;inp.setAttribute("aria-label","Team name");
+    inp.oninput=()=>{t.name=inp.value;renderBrushes();save();};
+    const a=list.reduce((x,s)=>x+s.a,0),poa=list.reduce((x,s)=>x+s.poa,0);
+    const stats=document.createElement("div");stats.className="stats";
+    stats.innerHTML=`<span><b class="mono">${list.length}</b> segs</span><span><b class="mono">${Math.round(acres(a)).toLocaleString()}</b> ac</span><span>POA <b class="mono">${poa.toFixed(1)}%</b></span>`;
+    const sg=document.createElement("div");sg.className="segs";sg.textContent=list.length?list.map(s=>s.id).join(", "):"No segments yet";
+    d.append(inp,stats,sg);box.appendChild(d);
+  });
+  const un=segs.filter(s=>!teamById(st.assign[s.id])),ua=un.reduce((x,s)=>x+s.a,0);
+  const d=document.createElement("div");d.className="team";d.style.setProperty("--c","var(--rule)");
+  d.innerHTML=`<b>Unassigned</b><div class="stats"><span><b class="mono">${un.length}</b> segs</span><span><b class="mono">${Math.round(acres(ua)).toLocaleString()}</b> ac</span><span>POA <b class="mono">${un.reduce((x,s)=>x+s.poa,0).toFixed(1)}%</b></span></div>`;
+  box.appendChild(d);
+  const rows=segs.filter(s=>s.kind==="ring").map(s=>`<tr><td class="mono">${s.id}</td><td>${s.b0!=null?Math.round(s.b0%360)+"°–"+(Math.round(s.b1%360)||360)+"°":"0–360°"}</td><td class="num">${(s.rin/1000).toFixed(2)}–${(s.rout/1000).toFixed(2)} km</td><td class="num">${Math.round(acres(s.a)).toLocaleString()}</td><td class="num">${s.poa.toFixed(2)}%</td><td>${(teamById(st.assign[s.id])||{}).name||"—"}</td></tr>`).join("");
+  $("ringTbl").innerHTML=`<thead><tr><th>Seg</th><th>Bearing</th><th>Range</th><th>Acres</th><th>POA</th><th>Team</th></tr></thead><tbody>${rows}</tbody>`;
+}
+$("addTeam").onclick=()=>{const i=st.teams.length,id="t"+Date.now().toString(36);
+  st.teams.push({id,name:"Team "+(i+1),c:PALETTE[i%PALETTE.length]});st.brush=id;renderBrushes();renderTeams();save();};
+
+/* ---------- rebuild ---------- */
+function rebuild(fly){
+  if(!origin){renderTeams();$("summary").textContent="Set the LKP to build the grid.";save();return;}
+  const r=build();segs=r.segs;
+  const ids=new Set(segs.map(s=>s.id));Object.keys(st.assign).forEach(k=>{if(!ids.has(k))delete st.assign[k];});
+  draw();renderTeams();
+  if(fly)map.fitBounds(L.latLngBounds([toLL(-r.E,-r.E),toLL(r.E,r.E)]),{padding:[10,10]});
+  const nr=segs.filter(s=>s.kind==="ring").length;
+  $("summary").textContent=`${nr} ring segments + ${segs.length-nr} squares · 95% ring ${st.r[3].toFixed(1)} km (${(st.r[3]/MI).toFixed(1)} mi)`;
+  save();
+}
+
+/* ---------- export ---------- */
+function kmlColor(hex,alpha){const h=hex.replace("#","");return alpha+h.slice(4,6)+h.slice(2,4)+h.slice(0,2);}
+function esc(s){return String(s).replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));}
+function coords(pts){return pts.concat([pts[0]]).map(q=>{const ll=toLL(q[0],q[1]);return ll[1].toFixed(7)+","+ll[0].toFixed(7)+",0";}).join(" ");}
+function makeKML(){
+  const name=st.incident||"Search grid";
+  let styles=st.teams.map(t=>`<Style id="${t.id}"><LineStyle><color>${kmlColor(t.c,"ff")}</color><width>3</width></LineStyle><PolyStyle><color>${kmlColor(t.c,"66")}</color></PolyStyle></Style>`).join("");
+  styles+=`<Style id="un"><LineStyle><color>ffffffff</color><width>1.5</width></LineStyle><PolyStyle><color>14ffffff</color></PolyStyle></Style><Style id="lkp"><IconStyle><color>ff1f56e2</color><scale>1.2</scale></IconStyle></Style>`;
+  const pm=(s,style)=>{const t=teamById(st.assign[s.id]),lp=toLL(s.lp[0],s.lp[1]);
+    const desc=`Team: ${t?t.name:"Unassigned"}\nArea: ${Math.round(acres(s.a))} ac\nPOA: ${s.poa.toFixed(2)}%`;
+    return `<Placemark><name>${esc(s.id)}</name><description>${esc(desc)}</description><styleUrl>#${style}</styleUrl><ExtendedData><Data name="team"><value>${esc(t?t.name:"Unassigned")}</value></Data><Data name="poa"><value>${s.poa.toFixed(2)}</value></Data></ExtendedData><MultiGeometry><Point><coordinates>${lp[1].toFixed(7)},${lp[0].toFixed(7)},0</coordinates></Point><Polygon><outerBoundaryIs><LinearRing><tessellate>1</tessellate><coordinates>${coords(s.pts)}</coordinates></LinearRing></outerBoundaryIs></Polygon></MultiGeometry></Placemark>`;};
+  let folders=st.teams.map(t=>{const l=segs.filter(s=>st.assign[s.id]===t.id);return l.length?`<Folder><name>${esc(t.name)}</name>${l.map(s=>pm(s,t.id)).join("")}</Folder>`:"";}).join("");
+  folders+=`<Folder><name>Unassigned</name>${segs.filter(s=>!teamById(st.assign[s.id])).map(s=>pm(s,"un")).join("")}</Folder>`;
+  const lkp=`<Placemark><name>LKP</name><description>${esc(name)} – last known point</description><styleUrl>#lkp</styleUrl><Point><coordinates>${origin.lon.toFixed(7)},${origin.lat.toFixed(7)},0</coordinates></Point></Placemark>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(name)}</name>${styles}${lkp}${folders}</Document></kml>`;
+}
+function uid(){return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==="x"?r:(r&3|8)).toString(16);});}
+function toast(t){$("toast").textContent=t;}
+function slug(){return (st.incident||"search-grid").replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"_").slice(0,60)||"search-grid";}
+function download(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);}
+$("exportPkg").onclick=async()=>{
+  if(!origin){toast("Set the LKP first.");return;}
+  if(!window.JSZip){toast("Packaging library didn’t load. Use Download KML.");return;}
+  const name=st.incident||"Search grid",kmlName=slug()+".kml";
+  const manifest=`<MissionPackageManifest version="2"><Configuration><Parameter name="uid" value="${uid()}"/><Parameter name="name" value="${esc(name)}"/><Parameter name="onReceiveDelete" value="false"/></Configuration><Contents><Content ignore="false" zipEntry="${kmlName}"/></Contents></MissionPackageManifest>`;
+  const z=new JSZip();z.file("MANIFEST/manifest.xml",manifest);z.file(kmlName,makeKML());
+  download(await z.generateAsync({type:"blob"}),slug()+"_ATAK.zip");toast("Downloaded. Import the .zip in ATAK.");
+};
+$("exportKml").onclick=()=>{if(!origin){toast("Set the LKP first.");return;}
+  download(new Blob([makeKML()],{type:"application/vnd.google-earth.kml+xml"}),slug()+".kml");toast("KML downloaded.");};
+
+/* ---------- init ---------- */
+fillInputs();renderBrushes();
+const p0=st.lkp&&parseLKP(st.lkp);
+if(p0)setOrigin(p0[0],p0[1],!st.view);else{rebuild(false);setPlacing(true);}
+})();
+</script>
+</body>
+</html>
