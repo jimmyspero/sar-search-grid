@@ -79,6 +79,7 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
   text-shadow:0 0 3px #000,0 0 3px #000,0 0 2px #000;font-size:12px;white-space:nowrap}
 .seglbl.sq{font-weight:500;font-size:10.5px}
 .seglbl span{position:absolute;left:0;top:0;transform:translate(-50%,-50%)}
+.seglbl.ringlbl span{color:#ffd23f;font-size:12px;text-shadow:0 0 3px #000,0 0 3px #000}
 .lkpicon{width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 0 0 2px #000a}
 .leaflet-container{font-family:var(--body)}
 </style>
@@ -130,7 +131,8 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
           <div><label for="r3">75%</label><input id="r3" class="mono" inputmode="decimal"></div>
           <div><label for="r4">95%</label><input id="r4" class="mono" inputmode="decimal"></div>
         </div>
-        <p class="hint">Not drawn. They set how far the squares extend (95%) and each square's POA.</p>
+        <label class="check" style="text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400"><input type="checkbox" id="showR"> Show 25 / 50 / 75 / 95% rings over the squares</label>
+        <p class="hint">They also set how far the squares extend (95%) and each square's POA.</p>
         <p class="hint err" id="rErr" hidden></p>
       </div>
       <div class="row2">
@@ -201,7 +203,7 @@ const KEY="sar-grid-v2";
 const MI=1.609344;
 const $=id=>document.getElementById(id);
 
-let st={incident:"",lkp:"",profile:"Dementia",r:PROFILES["Dementia"].slice(),unit:"km",nsec:8,rot:0,splitA:false,inner:100,core:300,cell:500,buf:1000,
+let st={incident:"",lkp:"",profile:"Dementia",r:PROFILES["Dementia"].slice(),unit:"km",nsec:8,rot:0,splitA:false,showR:true,inner:100,core:300,cell:500,buf:1000,
   teams:[{id:"t1",name:"Drone 1",c:PALETTE[0]},{id:"t2",name:"Drone 2",c:PALETTE[1]},{id:"t3",name:"Ground A",c:PALETTE[2]},{id:"t4",name:"Ground B",c:PALETTE[3]},{id:"t5",name:"K9 1",c:PALETTE[4]}],
   assign:{},brush:"t1",base:"Imagery",view:null};
 try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s&&s.r)st=Object.assign(st,s);}catch(e){}
@@ -245,7 +247,7 @@ function fillInputs(){
   const f=st.unit==="mi"?1/MI:1;
   [1,2,3,4].forEach(i=>$("r"+i).value=fmt(st.r[i-1]*f));
   $("uKm").setAttribute("aria-pressed",st.unit==="km");$("uMi").setAttribute("aria-pressed",st.unit==="mi");
-  $("inner").value=st.inner;$("core").value=st.core;$("nsec").value=String(st.nsec);$("rot").value=st.rot;$("splitA").checked=st.splitA;$("cell").value=st.cell;$("buf").value=st.buf;
+  $("inner").value=st.inner;$("core").value=st.core;$("nsec").value=String(st.nsec);$("rot").value=st.rot;$("splitA").checked=st.splitA;$("showR").checked=st.showR!==false;$("cell").value=st.cell;$("buf").value=st.buf;
 }
 function readRadii(){
   const f=st.unit==="mi"?MI:1;
@@ -261,6 +263,7 @@ $("uMi").onclick=()=>{st.unit="mi";fillInputs();save();};
 $("nsec").onchange=()=>{st.nsec=+$("nsec").value;rebuild(false);};
 $("rot").oninput=()=>{const v=parseFloat($("rot").value);if(!isNaN(v)){st.rot=((v%360)+360)%360;rebuild(false);}};
 $("splitA").onchange=()=>{st.splitA=$("splitA").checked;rebuild(false);};
+$("showR").onchange=()=>{st.showR=$("showR").checked;rebuild(false);};
 function readCore(){const a=parseFloat($("inner").value),b=parseFloat($("core").value);
   const ok=a>0&&b>a&&b<st.r[3]*1000;$("rErr").hidden=ok;$("rErr").textContent=ok?"":"Inner ring must be smaller than the 25% ring, and both inside the 95% distance.";
   if(ok){st.inner=a;st.core=b;}return ok;}
@@ -351,7 +354,10 @@ function draw(){
     s.lbl=L.marker(toLL(s.lp[0],s.lp[1]),{interactive:false,keyboard:false,
       icon:L.divIcon({className:"seglbl"+(s.kind==="sq"?" sq":""),html:"<span>"+s.id.replace("G-","")+"</span>",iconSize:[0,0],iconAnchor:[0,0]})});
   });
-  [st.inner,st.core].forEach((r,i)=>L.circle([origin.lat,origin.lon],{radius:r,color:"#ffffff",weight:i?3:2,fill:false,interactive:false}).addTo(gridLayer));
+  if(st.showR!==false)st.r.forEach((r,i)=>{if(r*1000<=st.core)return;
+    L.circle([origin.lat,origin.lon],{radius:r*1000,color:"#ffd23f",weight:i===3?3:2,opacity:.95,fill:false,interactive:false,dashArray:i===3?null:"8 6"}).addTo(gridLayer);
+    const lp=polar(r*1000,st.rot+180);L.marker(toLL(lp[0],lp[1]),{interactive:false,keyboard:false,icon:L.divIcon({className:"seglbl ringlbl",html:"<span>"+[25,50,75,95][i]+"%</span>",iconSize:[0,0],iconAnchor:[0,0]})}).addTo(gridLayer);});
+  [st.inner,st.core].forEach((r,i)=>L.circle([origin.lat,origin.lon],{radius:r,color:"#ff3b30",weight:i?3:2.5,opacity:1,fill:false,interactive:false}).addTo(gridLayer));
   if(lkpMarker)lkpMarker.remove();
   lkpMarker=L.marker([origin.lat,origin.lon],{draggable:true,zIndexOffset:1000,
     icon:L.divIcon({className:"",html:'<div class="lkpicon"></div>',iconSize:[22,22],iconAnchor:[11,11]})}).addTo(map);
@@ -415,7 +421,7 @@ function rebuild(fly){
   const r=build();segs=r.segs;
   const ids=new Set(segs.map(s=>s.id));Object.keys(st.assign).forEach(k=>{if(!ids.has(k))delete st.assign[k];});
   draw();renderTeams();
-  if(fly)map.fitBounds(L.latLngBounds([toLL(-r.E,-r.E),toLL(r.E,r.E)]),{padding:[10,10]});
+  if(fly){const z=st.r[1]*1000;map.fitBounds(L.latLngBounds([toLL(-z,-z),toLL(z,z)]),{padding:[10,10]});}
   const nr=segs.filter(s=>s.kind==="ring").length;
   $("summary").textContent=`${nr} ring segments inside ${st.core} m + ${segs.length-nr} squares out to ${st.r[3].toFixed(1)} km (${(st.r[3]/MI).toFixed(1)} mi)`;
   save();
