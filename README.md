@@ -3,9 +3,9 @@
 A browser tool for building search segments around a last known point (LKP) and exporting them to ATAK.
 
 - Drop the LKP on satellite imagery, USGS topo, or street maps (tap, type lat/long or MGRS, or use device GPS)
-- 100 m inner circle (A) and 100–300 m band split into sectors (B1–B8) as the 25% zone
-- Square grid (G-A01…) from the 300 m ring out past the subject category's 95% distance, with POA per square from the ring model
-- 25 / 50 / 75 / 95% rings for the subject category drawn as outlines over the squares (can be hidden)
+- Three rings around the LKP (100 / 300 / 500 m by default, editable): inner circle A, then sectors B1–B8 and C1–C8
+- POA per segment from the subject category's 25 / 50 / 75 / 95% distances
+- 25 / 50 / 75 / 95% rings for the subject category drawn as outlines (can be hidden)
 - Tap segments to assign them to drone, ground, or K9 teams; see acres and POA per team
 - Export an ATAK data package (.zip) or a plain KML
 
