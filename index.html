@@ -182,7 +182,7 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
   </section>
 
   <p class="foot">Category distances are approximate starting values for a temperate, flat-terrain region (straight-line distance from the IPP). Confirm against your Lost Person Behavior reference and adjust for terrain, weather and subject history. POA: the area inside the 25% ring holds 25%, split by area. Squares take their share from the ring model behind them: 25% between the 25% ring and the 50% distance, 25% from 50–75%, 20% from 75–95%, and 5% beyond, spread by area. Imagery © Esri and contributors; streets © OpenStreetMap contributors; topo © USGS.</p>
-  <p class="foot">Version 2026-11-03c · probability rings shown</p>
+  <p class="foot">Version 2026-11-03d · squares all the way around</p>
 </div>
 
 <script>
@@ -272,7 +272,7 @@ $("inner").oninput=()=>{if(readCore())rebuild(false);};
 $("core").oninput=()=>{if(readCore())rebuild(false);};
 $("cell").oninput=()=>{const v=parseFloat($("cell").value);if(v>=50){st.cell=v;rebuild(false);}};
 $("buf").oninput=()=>{const v=parseFloat($("buf").value);if(v>=0){st.buf=v;rebuild(false);}};
-$("lkp").onchange=()=>{const p=parseLKP($("lkp").value);if(p)setOrigin(p[0],p[1],true);};
+$("lkp").onchange=()=>{const p=parseLKP($("lkp").value);if(p){setPlacing(false);setOrigin(p[0],p[1],true);}};
 $("incident").oninput=()=>{st.incident=$("incident").value;save();};
 $("resetBtn").onclick=()=>{if(!Object.keys(st.assign).length)return;const b=$("resetBtn");
   if(b.dataset.confirm){st.assign={};segs.forEach(paint);renderTeams();save();b.textContent="Clear all assignments";delete b.dataset.confirm;}
@@ -302,6 +302,25 @@ function arc(r,b0,b1){const n=Math.max(4,Math.ceil(Math.abs(b1-b0)/2));const p=[
 function area(p){let s=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];s+=a[0]*b[1]-b[0]*a[1];}return Math.abs(s)/2;}
 function centroid(p){let x=0,y=0;p.forEach(q=>{x+=q[0];y+=q[1];});return [x/p.length,y/p.length];}
 function colName(i){let s="";i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s;}
+// square minus the disk of radius rc: walk the square's edge and swap each run inside the disk for the arc between where it enters and leaves
+function clipOut(corners,rc){
+  const steps=24,b=[];
+  for(let k=0;k<4;k++){const a=corners[k],q=corners[(k+1)%4];for(let t=0;t<steps;t++)b.push([a[0]+(q[0]-a[0])*t/steps,a[1]+(q[1]-a[1])*t/steps]);}
+  const inside=p=>Math.hypot(p[0],p[1])<rc,n=b.length,s0=b.findIndex(p=>!inside(p));
+  if(s0<0)return null;
+  const cross=(o,i)=>{let lo=0,hi=1;for(let k=0;k<30;k++){const m=(lo+hi)/2,x=o[0]+(i[0]-o[0])*m,y=o[1]+(i[1]-o[1])*m;if(Math.hypot(x,y)<rc)hi=m;else lo=m;}
+    return Math.atan2(o[1]+(i[1]-o[1])*lo,o[0]+(i[0]-o[0])*lo);};
+  const out=[];let k=0;
+  while(k<n){const p=b[(s0+k)%n];
+    if(!inside(p)){out.push(p);k++;continue;}
+    const prev=b[(s0+k-1+n)%n];let j=k;while(j<n&&inside(b[(s0+j)%n]))j++;
+    const next=b[(s0+j)%n],a0=cross(prev,p),a1=cross(next,b[(s0+j-1)%n]);
+    let da=a1-a0;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+    const m=Math.max(2,Math.ceil(Math.abs(da)/(Math.PI/90)));
+    for(let t=0;t<=m;t++){const a=a0+da*t/m;out.push([rc*Math.cos(a),rc*Math.sin(a)]);}
+    k=j;}
+  return out;
+}
 function build(){
   const R=st.r.map(v=>v*1000),n=st.nsec,w=360/n,out=[],ri=st.inner,rc=st.core;
   const coreArea=Math.PI*rc*rc;
@@ -319,9 +338,7 @@ function build(){
     if(corners.every(q=>Math.hypot(q[0],q[1])<=rc))continue;
     let pts;
     if(Math.hypot(Math.max(x0,Math.min(0,x1)),Math.max(y0,Math.min(0,y1)))<rc){
-      pts=[];const steps=24;
-      for(let k=0;k<4;k++){const a=corners[k],bq=corners[(k+1)%4];
-        for(let t=0;t<steps;t++){let x=a[0]+(bq[0]-a[0])*t/steps,y=a[1]+(bq[1]-a[1])*t/steps;const d=Math.hypot(x,y);if(d<rc){x*=rc/d;y*=rc/d;}pts.push([x,y]);}}
+      pts=clipOut(corners,rc);if(!pts)continue;
     }else pts=corners;
     const A=area(pts);if(A<s*s*0.01)continue;
     sq.push({id:"G-"+colName(c)+String(row+1).padStart(2,"0"),kind:"sq",pts,a:A,lp:centroid(pts),x0,y0});
