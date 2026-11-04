@@ -175,11 +175,11 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
       <button id="exportKml">Download KML</button>
       <span class="toast" id="toast" role="status"></span>
     </div>
-    <p class="hint">In ATAK: Import Manager → Local SD → pick the .zip (or .kml). Segments arrive as labeled, team-colored polygons grouped by team, with the LKP marked. Send the .zip as a data package to push it to every device.</p>
+    <p class="hint">In ATAK: Import Manager → Local SD → pick the .zip. Each segment arrives as a regular ATAK shape, team-colored, with the LKP marked. Tap a segment and open its details to rename it (say, to a search team name), change its color or add remarks. Send the .zip as a data package to push it to every device. The KML is a read-only backup.</p>
   </section>
 
   <p class="foot">Category distances are approximate starting values for a temperate, flat-terrain region (straight-line distance from the IPP). Confirm against your Lost Person Behavior reference and adjust for terrain, weather and subject history. POA for each segment comes from the category distances: 25% of the probability falls inside the 25% distance, 50% inside the 50% distance, and so on, spread evenly by area between them and split equally across sectors. Imagery © Esri and contributors; streets © OpenStreetMap contributors; topo © USGS.</p>
-  <p class="foot">Version 2026-11-03e · three rings, no squares</p>
+  <p class="foot">Version 2026-11-03f · editable ATAK shapes</p>
 </div>
 
 <script>
@@ -422,12 +422,32 @@ function uid(){return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>
 function toast(t){$("toast").textContent=t;}
 function slug(){return (st.incident||"search-grid").replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"_").slice(0,60)||"search-grid";}
 function download(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);}
+// ATAK color: signed 32-bit ARGB integer
+function atakColor(hex,a){const v=((a<<24)|parseInt(hex.replace("#",""),16))>>>0;return v>2147483647?v-4294967296:v;}
+function cotEvent(id,type,lat,lon,detail,time,stale){
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><event version="2.0" uid="${id}" type="${type}" time="${time}" start="${time}" stale="${stale}" how="h-e"><point lat="${lat.toFixed(7)}" lon="${lon.toFixed(7)}" hae="9999999.0" ce="9999999.0" le="9999999.0"/><detail>${detail}</detail></event>`;}
+function makeCoT(){
+  const now=new Date(),time=now.toISOString(),stale=new Date(now.getTime()+365*864e5).toISOString(),files=[];
+  const tag=(st.incident||"grid").replace(/[^\w]+/g,"-").slice(0,24);
+  segs.forEach(s=>{
+    const t=teamById(st.assign[s.id]),c=t?t.c:"#ffffff",ll=toLL(s.lp[0],s.lp[1]);
+    const pts=s.pts.concat([s.pts[0]]).map(q=>{const p=toLL(q[0],q[1]);return `<link point="${p[0].toFixed(7)},${p[1].toFixed(7)}"/>`;}).join("");
+    const rem=`${st.incident?st.incident+" · ":""}Segment ${s.id} · Team: ${t?t.name:"Unassigned"} · ${Math.round(acres(s.a))} ac · POA ${s.poa.toFixed(2)}%`;
+    const id="sg-"+tag+"-"+s.id+"-"+uid().slice(0,8);
+    const det=`${pts}<strokeColor value="${atakColor(c,255)}"/><strokeWeight value="${t?3:2}.0"/><fillColor value="${atakColor(c,t?102:20)}"/><contact callsign="${esc(t?s.id+" "+t.name:s.id)}"/><remarks>${esc(rem)}</remarks><archive/><labels_on value="true"/>`;
+    files.push({id,xml:cotEvent(id,"u-d-f",ll[0],ll[1],det,time,stale)});
+  });
+  const lid="sg-"+tag+"-LKP-"+uid().slice(0,8);
+  files.push({id:lid,xml:cotEvent(lid,"b-m-p-s-m",origin.lat,origin.lon,`<contact callsign="LKP"/><color argb="${atakColor("#e2561f",255)}"/><remarks>${esc((st.incident||"Search")+" – last known point")}</remarks><archive/>`,time,stale)});
+  return files;
+}
 $("exportPkg").onclick=async()=>{
   if(!origin){toast("Set the LKP first.");return;}
   if(!window.JSZip){toast("Packaging library didn’t load. Use Download KML.");return;}
-  const name=st.incident||"Search grid",kmlName=slug()+".kml";
-  const manifest=`<MissionPackageManifest version="2"><Configuration><Parameter name="uid" value="${uid()}"/><Parameter name="name" value="${esc(name)}"/><Parameter name="onReceiveDelete" value="false"/></Configuration><Contents><Content ignore="false" zipEntry="${kmlName}"/></Contents></MissionPackageManifest>`;
-  const z=new JSZip();z.file("MANIFEST/manifest.xml",manifest);z.file(kmlName,makeKML());
+  const name=st.incident||"Search grid",z=new JSZip(),files=makeCoT();
+  files.forEach(f=>z.file(f.id+"/"+f.id+".cot",f.xml));
+  const manifest=`<MissionPackageManifest version="2"><Configuration><Parameter name="uid" value="${uid()}"/><Parameter name="name" value="${esc(name)}"/><Parameter name="onReceiveDelete" value="false"/></Configuration><Contents>${files.map(f=>`<Content ignore="false" zipEntry="${f.id}/${f.id}.cot"><Parameter name="uid" value="${f.id}"/></Content>`).join("")}</Contents></MissionPackageManifest>`;
+  z.file("MANIFEST/manifest.xml",manifest);
   download(await z.generateAsync({type:"blob"}),slug()+"_ATAK.zip");toast("Downloaded. Import the .zip in ATAK.");
 };
 $("exportKml").onclick=()=>{if(!origin){toast("Set the LKP first.");return;}

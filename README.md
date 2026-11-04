@@ -7,7 +7,7 @@ A browser tool for building search segments around a last known point (LKP) and 
 - POA per segment from the subject category's 25 / 50 / 75 / 95% distances
 - 25 / 50 / 75 / 95% rings for the subject category drawn as outlines (can be hidden)
 - Tap segments to assign them to drone, ground, or K9 teams; see acres and POA per team
-- Export an ATAK data package (.zip) or a plain KML
+- Export an ATAK data package (.zip) whose segments arrive as regular ATAK shapes you can rename, recolor and annotate in ATAK; or a plain read-only KML
 
 Ring distances are approximate starting values. Confirm them against your Lost Person Behavior reference.
 
