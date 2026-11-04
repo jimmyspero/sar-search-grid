@@ -111,11 +111,15 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
       <div>
         <label for="profile">Subject category</label>
         <select id="profile"></select>
-        <p class="hint">Fills the 25 / 50 / 75 / 95% rings. Edit any value to match your field guide.</p>
+        <p class="hint">Sets the category distances below. Edit any value to match your field guide.</p>
       </div>
       <div>
+        <div class="row2" style="margin-bottom:12px">
+          <div><label for="inner">Inner ring (m)</label><input id="inner" class="mono" inputmode="numeric"></div>
+          <div><label for="core">25% ring (m)</label><input id="core" class="mono" inputmode="numeric"></div>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span class="lab" style="margin:0">Ring radii</span>
+          <span class="lab" style="margin:0">Category distances</span>
           <span class="seg-toggle" role="group" aria-label="Units">
             <button id="uKm" aria-pressed="true">km</button><button id="uMi" aria-pressed="false">mi</button>
           </span>
@@ -126,6 +130,7 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
           <div><label for="r3">75%</label><input id="r3" class="mono" inputmode="decimal"></div>
           <div><label for="r4">95%</label><input id="r4" class="mono" inputmode="decimal"></div>
         </div>
+        <p class="hint">Not drawn. They set how far the squares extend (95%) and each square's POA.</p>
         <p class="hint err" id="rErr" hidden></p>
       </div>
       <div class="row2">
@@ -133,7 +138,7 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
           <select id="nsec"><option>4</option><option>8</option><option>12</option><option>16</option></select></div>
         <div><label for="rot">Rotate sectors (°)</label><input id="rot" class="mono" inputmode="decimal"></div>
       </div>
-      <label class="check" style="text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400"><input type="checkbox" id="splitA"> Split the 25% circle into sectors</label>
+      <label class="check" style="text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400"><input type="checkbox" id="splitA"> Split the inner circle into sectors</label>
       <div class="row2">
         <div><label for="cell">Square size (m)</label><input id="cell" class="mono" inputmode="numeric"></div>
         <div><label for="buf">Squares past 95% (m)</label><input id="buf" class="mono" inputmode="numeric"></div>
@@ -174,7 +179,7 @@ td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-num
     <p class="hint">In ATAK: Import Manager → Local SD → pick the .zip (or .kml). Segments arrive as labeled, team-colored polygons grouped by team, with the LKP marked. Send the .zip as a data package to push it to every device.</p>
   </section>
 
-  <p class="foot">Ring distances are approximate starting values for a temperate, flat-terrain region (straight-line distance from the IPP). Confirm against your Lost Person Behavior reference and adjust for terrain, weather and subject history. POA shares follow the ring model: 25% in each of the first three bands, 20% in the 75–95% band, 5% spread across the outer squares by area. Imagery © Esri and contributors; streets © OpenStreetMap contributors; topo © USGS.</p>
+  <p class="foot">Category distances are approximate starting values for a temperate, flat-terrain region (straight-line distance from the IPP). Confirm against your Lost Person Behavior reference and adjust for terrain, weather and subject history. POA: the area inside the 25% ring holds 25%, split by area. Squares take their share from the ring model behind them: 25% between the 25% ring and the 50% distance, 25% from 50–75%, 20% from 75–95%, and 5% beyond, spread by area. Imagery © Esri and contributors; streets © OpenStreetMap contributors; topo © USGS.</p>
 </div>
 
 <script>
@@ -196,7 +201,7 @@ const KEY="sar-grid-v2";
 const MI=1.609344;
 const $=id=>document.getElementById(id);
 
-let st={incident:"",lkp:"",profile:"Dementia",r:PROFILES["Dementia"].slice(),unit:"km",nsec:8,rot:0,splitA:false,cell:500,buf:1000,
+let st={incident:"",lkp:"",profile:"Dementia",r:PROFILES["Dementia"].slice(),unit:"km",nsec:8,rot:0,splitA:false,inner:100,core:300,cell:500,buf:1000,
   teams:[{id:"t1",name:"Drone 1",c:PALETTE[0]},{id:"t2",name:"Drone 2",c:PALETTE[1]},{id:"t3",name:"Ground A",c:PALETTE[2]},{id:"t4",name:"Ground B",c:PALETTE[3]},{id:"t5",name:"K9 1",c:PALETTE[4]}],
   assign:{},brush:"t1",base:"Imagery",view:null};
 try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s&&s.r)st=Object.assign(st,s);}catch(e){}
@@ -240,13 +245,13 @@ function fillInputs(){
   const f=st.unit==="mi"?1/MI:1;
   [1,2,3,4].forEach(i=>$("r"+i).value=fmt(st.r[i-1]*f));
   $("uKm").setAttribute("aria-pressed",st.unit==="km");$("uMi").setAttribute("aria-pressed",st.unit==="mi");
-  $("nsec").value=String(st.nsec);$("rot").value=st.rot;$("splitA").checked=st.splitA;$("cell").value=st.cell;$("buf").value=st.buf;
+  $("inner").value=st.inner;$("core").value=st.core;$("nsec").value=String(st.nsec);$("rot").value=st.rot;$("splitA").checked=st.splitA;$("cell").value=st.cell;$("buf").value=st.buf;
 }
 function readRadii(){
   const f=st.unit==="mi"?MI:1;
   const r=[1,2,3,4].map(i=>parseFloat($("r"+i).value)*f);
-  const ok=r.every(v=>v>0)&&r[0]<r[1]&&r[1]<r[2]&&r[2]<r[3];
-  $("rErr").hidden=ok;$("rErr").textContent=ok?"":"Each ring must be larger than the one before it.";
+  const ok=r.every(v=>v>0)&&r[0]<r[1]&&r[1]<r[2]&&r[2]<r[3]&&r[3]*1000>st.core;
+  $("rErr").hidden=ok;$("rErr").textContent=ok?"":"Each distance must be larger than the one before it, and the 95% distance must be past the 25% ring.";
   if(ok)st.r=r;return ok;
 }
 prof.onchange=()=>{st.profile=prof.value;if(PROFILES[prof.value])st.r=PROFILES[prof.value].slice();fillInputs();rebuild(true);};
@@ -256,6 +261,11 @@ $("uMi").onclick=()=>{st.unit="mi";fillInputs();save();};
 $("nsec").onchange=()=>{st.nsec=+$("nsec").value;rebuild(false);};
 $("rot").oninput=()=>{const v=parseFloat($("rot").value);if(!isNaN(v)){st.rot=((v%360)+360)%360;rebuild(false);}};
 $("splitA").onchange=()=>{st.splitA=$("splitA").checked;rebuild(false);};
+function readCore(){const a=parseFloat($("inner").value),b=parseFloat($("core").value);
+  const ok=a>0&&b>a&&b<st.r[3]*1000;$("rErr").hidden=ok;$("rErr").textContent=ok?"":"Inner ring must be smaller than the 25% ring, and both inside the 95% distance.";
+  if(ok){st.inner=a;st.core=b;}return ok;}
+$("inner").oninput=()=>{if(readCore())rebuild(false);};
+$("core").oninput=()=>{if(readCore())rebuild(false);};
 $("cell").oninput=()=>{const v=parseFloat($("cell").value);if(v>=50){st.cell=v;rebuild(false);}};
 $("buf").oninput=()=>{const v=parseFloat($("buf").value);if(v>=0){st.buf=v;rebuild(false);}};
 $("lkp").onchange=()=>{const p=parseLKP($("lkp").value);if(p)setOrigin(p[0],p[1],true);};
@@ -289,30 +299,39 @@ function area(p){let s=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.le
 function centroid(p){let x=0,y=0;p.forEach(q=>{x+=q[0];y+=q[1];});return [x/p.length,y/p.length];}
 function colName(i){let s="";i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s;}
 function build(){
-  const R=st.r.map(v=>v*1000),n=st.nsec,w=360/n,out=[],bandPOA=[25,25,25,20],bands=["A","B","C","D"];
-  for(let b=0;b<4;b++){
-    const rin=b?R[b-1]:0,rout=R[b];
-    if(b===0&&!st.splitA){out.push({id:"A",kind:"ring",pts:arc(rout,0,360).slice(0,-1),poa:25,lp:[0,0],a:Math.PI*rout*rout,rin:0,rout});continue;}
-    for(let j=0;j<n;j++){
-      const b0=st.rot+j*w,b1=b0+w;let pts=arc(rout,b0,b1);
-      pts=rin>0?pts.concat(arc(rin,b1,b0)):pts.concat([[0,0]]);
-      out.push({id:bands[b]+(j+1),kind:"ring",pts,poa:bandPOA[b]/n,lp:polar(rin>0?(rin+rout)/2:rout*0.6,b0+w/2),a:area(pts),b0,b1,rin,rout});
-    }
-  }
+  const R=st.r.map(v=>v*1000),n=st.nsec,w=360/n,out=[],ri=st.inner,rc=st.core;
+  const coreArea=Math.PI*rc*rc;
+  // inner circle
+  if(!st.splitA) out.push({id:"A",kind:"ring",pts:arc(ri,0,360).slice(0,-1),poa:25*(Math.PI*ri*ri)/coreArea,lp:[0,0],a:Math.PI*ri*ri,rin:0,rout:ri});
+  else for(let j=0;j<n;j++){const b0=st.rot+j*w,b1=b0+w,pts=arc(ri,b0,b1).concat([[0,0]]),A=area(pts);
+    out.push({id:"A"+(j+1),kind:"ring",pts,poa:25*A/coreArea,lp:polar(ri*0.6,b0+w/2),a:A,b0,b1,rin:0,rout:ri});}
+  // 100–300 band
+  for(let j=0;j<n;j++){const b0=st.rot+j*w,b1=b0+w,pts=arc(rc,b0,b1).concat(arc(ri,b1,b0)),A=area(pts);
+    out.push({id:"B"+(j+1),kind:"ring",pts,poa:25*A/coreArea,lp:polar((ri+rc)/2,b0+w/2),a:A,b0,b1,rin:ri,rout:rc});}
+  // squares from the 25% ring out past the 95% distance
   const s=st.cell,r4=R[3],E=Math.ceil((r4+st.buf)/s)*s,cols=Math.round(2*E/s),sq=[];
   for(let row=0;row<cols;row++)for(let c=0;c<cols;c++){
     const x0=-E+c*s,y1=E-row*s,x1=x0+s,y0=y1-s,corners=[[x0,y1],[x1,y1],[x1,y0],[x0,y0]];
-    if(corners.every(q=>Math.hypot(q[0],q[1])<=r4))continue;
+    if(corners.every(q=>Math.hypot(q[0],q[1])<=rc))continue;
     let pts;
-    if(Math.hypot(Math.max(x0,Math.min(0,x1)),Math.max(y0,Math.min(0,y1)))<r4){
+    if(Math.hypot(Math.max(x0,Math.min(0,x1)),Math.max(y0,Math.min(0,y1)))<rc){
       pts=[];const steps=24;
       for(let k=0;k<4;k++){const a=corners[k],bq=corners[(k+1)%4];
-        for(let t=0;t<steps;t++){let x=a[0]+(bq[0]-a[0])*t/steps,y=a[1]+(bq[1]-a[1])*t/steps;const d=Math.hypot(x,y);if(d<r4){x*=r4/d;y*=r4/d;}pts.push([x,y]);}}
+        for(let t=0;t<steps;t++){let x=a[0]+(bq[0]-a[0])*t/steps,y=a[1]+(bq[1]-a[1])*t/steps;const d=Math.hypot(x,y);if(d<rc){x*=rc/d;y*=rc/d;}pts.push([x,y]);}}
     }else pts=corners;
     const A=area(pts);if(A<s*s*0.01)continue;
-    sq.push({id:"G-"+colName(c)+String(row+1).padStart(2,"0"),kind:"sq",pts,a:A,lp:centroid(pts)});
+    sq.push({id:"G-"+colName(c)+String(row+1).padStart(2,"0"),kind:"sq",pts,a:A,lp:centroid(pts),x0,y0});
   }
-  const tot=sq.reduce((t,q)=>t+q.a,0);sq.forEach(q=>q.poa=5*q.a/tot);
+  // POA for squares: piecewise-uniform density by distance band, sampled 12x12 per square
+  const edges=[rc,Math.max(R[1],rc+1),Math.max(R[2],rc+2),Math.max(R[3],rc+3)],share=[25,25,20];
+  const dens=share.map((p,i)=>p/(Math.PI*(edges[i+1]**2-edges[i]**2)));
+  const N=12,cellA=s*s/(N*N);let beyond=0;
+  sq.forEach(q=>{q.inP=0;q.out=0;
+    for(let i=0;i<N;i++)for(let j=0;j<N;j++){const d=Math.hypot(q.x0+(i+.5)*s/N,q.y0+(j+.5)*s/N);
+      if(d<rc)continue;if(d>=edges[3]){q.out+=cellA;continue;}
+      const k=d<edges[1]?0:d<edges[2]?1:2;q.inP+=dens[k]*cellA;}
+    beyond+=q.out;});
+  sq.forEach(q=>{q.poa=q.inP+(beyond?5*q.out/beyond:0);});
   return {segs:out.concat(sq),E};
 }
 
@@ -332,7 +351,7 @@ function draw(){
     s.lbl=L.marker(toLL(s.lp[0],s.lp[1]),{interactive:false,keyboard:false,
       icon:L.divIcon({className:"seglbl"+(s.kind==="sq"?" sq":""),html:"<span>"+s.id.replace("G-","")+"</span>",iconSize:[0,0],iconAnchor:[0,0]})});
   });
-  st.r.forEach((r,i)=>L.circle([origin.lat,origin.lon],{radius:r*1000,color:"#ffffff",weight:i===3?3:2,fill:false,interactive:false,dashArray:i===3?null:"6 4"}).addTo(gridLayer));
+  [st.inner,st.core].forEach((r,i)=>L.circle([origin.lat,origin.lon],{radius:r,color:"#ffffff",weight:i?3:2,fill:false,interactive:false}).addTo(gridLayer));
   if(lkpMarker)lkpMarker.remove();
   lkpMarker=L.marker([origin.lat,origin.lon],{draggable:true,zIndexOffset:1000,
     icon:L.divIcon({className:"",html:'<div class="lkpicon"></div>',iconSize:[22,22],iconAnchor:[11,11]})}).addTo(map);
@@ -384,7 +403,7 @@ function renderTeams(){
   const d=document.createElement("div");d.className="team";d.style.setProperty("--c","var(--rule)");
   d.innerHTML=`<b>Unassigned</b><div class="stats"><span><b class="mono">${un.length}</b> segs</span><span><b class="mono">${Math.round(acres(ua)).toLocaleString()}</b> ac</span><span>POA <b class="mono">${un.reduce((x,s)=>x+s.poa,0).toFixed(1)}%</b></span></div>`;
   box.appendChild(d);
-  const rows=segs.filter(s=>s.kind==="ring").map(s=>`<tr><td class="mono">${s.id}</td><td>${s.b0!=null?Math.round(s.b0%360)+"°–"+(Math.round(s.b1%360)||360)+"°":"0–360°"}</td><td class="num">${(s.rin/1000).toFixed(2)}–${(s.rout/1000).toFixed(2)} km</td><td class="num">${Math.round(acres(s.a)).toLocaleString()}</td><td class="num">${s.poa.toFixed(2)}%</td><td>${(teamById(st.assign[s.id])||{}).name||"—"}</td></tr>`).join("");
+  const rows=segs.filter(s=>s.kind==="ring").map(s=>`<tr><td class="mono">${s.id}</td><td>${s.b0!=null?Math.round(s.b0%360)+"°–"+(Math.round(s.b1%360)||360)+"°":"0–360°"}</td><td class="num">${Math.round(s.rin)}–${Math.round(s.rout)} m</td><td class="num">${Math.round(acres(s.a)).toLocaleString()}</td><td class="num">${s.poa.toFixed(2)}%</td><td>${(teamById(st.assign[s.id])||{}).name||"—"}</td></tr>`).join("");
   $("ringTbl").innerHTML=`<thead><tr><th>Seg</th><th>Bearing</th><th>Range</th><th>Acres</th><th>POA</th><th>Team</th></tr></thead><tbody>${rows}</tbody>`;
 }
 $("addTeam").onclick=()=>{const i=st.teams.length,id="t"+Date.now().toString(36);
@@ -398,7 +417,7 @@ function rebuild(fly){
   draw();renderTeams();
   if(fly)map.fitBounds(L.latLngBounds([toLL(-r.E,-r.E),toLL(r.E,r.E)]),{padding:[10,10]});
   const nr=segs.filter(s=>s.kind==="ring").length;
-  $("summary").textContent=`${nr} ring segments + ${segs.length-nr} squares · 95% ring ${st.r[3].toFixed(1)} km (${(st.r[3]/MI).toFixed(1)} mi)`;
+  $("summary").textContent=`${nr} ring segments inside ${st.core} m + ${segs.length-nr} squares out to ${st.r[3].toFixed(1)} km (${(st.r[3]/MI).toFixed(1)} mi)`;
   save();
 }
 
